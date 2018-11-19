@@ -32,6 +32,7 @@
 #include <memory>
 #include <mutex>
 #include <queue>
+#include <fstream>
 
 #include <cv_bridge/cv_bridge.h>
 #include <geometry_msgs/Pose.h>
@@ -83,6 +84,8 @@ class RovioNode{
   typedef typename std::tuple_element<2,typename mtFilter::mtUpdates>::type mtVelocityUpdate;
   typedef typename mtVelocityUpdate::mtMeas mtVelocityMeas;
   mtVelocityMeas velocityUpdateMeas_;
+
+  std::ofstream m_pose_file;
 
   struct FilterInitializationState {
     FilterInitializationState()
@@ -328,11 +331,18 @@ class RovioNode{
     markerMsg_.color.r = 0.0;
     markerMsg_.color.g = 1.0;
     markerMsg_.color.b = 0.0;
+
+    m_pose_file.open("raw_pose_per_frame_rovio.txt");
+    m_pose_file << std::fixed;
+
   }
 
   /** \brief Destructor
    */
-  virtual ~RovioNode(){}
+  virtual ~RovioNode(){
+    std::cout << "Shutting down----------";
+    m_pose_file.close();
+  }
 
   /** \brief Tests the functionality of the rovio node.
    *
@@ -523,6 +533,25 @@ class RovioNode{
         mpFilter_->template addUpdateMeas<0>(imgUpdateMeas_,msgTime);
         imgUpdateMeas_.template get<mtImgMeas::_aux>().reset(msgTime);
         updateAndPublish();
+
+        //Write the new poses to a file 
+        // Obtain the save filter state.
+        mtFilterState& filterState = mpFilter_->safe_;
+	      mtState& state = mpFilter_->safe_.state_;
+        int camID=0; // left camera
+
+        double timestamps_secs = ros::Time(mpFilter_->safe_.t_).toSec();
+        float x=state.MrMC(camID)(0);
+        float y=state.MrMC(camID)(1);
+        float z=state.MrMC(camID)(2);
+        float qx=state.qCM(camID).x();
+        float qy=state.qCM(camID).y();
+        float qz=state.qCM(camID).z();
+        float qw=state.qCM(camID).w();
+
+        m_pose_file << std::setprecision(6) << timestamps_secs << " " << std::setprecision(9) << x << " " << y << " " << z << " " << qx << " " << qy << " " << qz << " " << qw << std::endl;
+
+
       }
     }
   }
